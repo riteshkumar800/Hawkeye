@@ -1,0 +1,14 @@
+{
+  "manifest_version": 3,
+  "name": "IG DOM Watcher",
+  "version": "0.1",
+  "description": "Learning demo: detect SPA route changes and DOM mutations on Instagram.",
+  "permissions": ["storage"],
+  "content_scripts": [
+    {
+      "matches": ["https://www.instagram.com/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}
