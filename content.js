@@ -250,6 +250,55 @@ function diagnose() {
 const COLUMNS = ["username", "posted", "text", "url", "savedAt"];
 const PROFILE_COLUMNS = ["username", "fullName", "bio", "url", "savedAt"];
 
+/* ------------------------------------------------------------------
+   Dashboard sync
+
+   dashboard.py is the source of truth. We still write to
+   chrome.storage first so saving works with the server down, then push.
+   Records that made it to the server are marked synced, and anything
+   synced that later disappears server-side was deleted from a card -
+   so we drop it locally too.
+------------------------------------------------------------------ */
+
+const SERVER = "http://localhost:8765";
+const commentKey = r => `${r.username}|${r.posted}|${r.text}`;
+
+async function push(path, record) {
+  try {
+    const res = await fetch(SERVER + path, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(record)
+    });
+    return res.ok;
+  } catch {
+    return false;                 // server not running - stays local
+  }
+}
+
+async function syncFromServer() {
+  let state;
+  try {
+    state = await fetch(SERVER + "/api/state").then(r => r.json());
+  } catch {
+    return;                       // offline: never prune on a failed fetch
+  }
+
+  const liveComments = new Set(state.comments || []);
+  const liveProfiles = new Set(state.profiles || []);
+  const { saved = [], profiles = [] } = await chrome.storage.local.get(["saved", "profiles"]);
+
+  const keptComments = saved.filter(r => !r.synced || liveComments.has(commentKey(r)));
+  const keptProfiles = profiles.filter(p => !p.synced || liveProfiles.has(p.username));
+
+  if (keptComments.length !== saved.length || keptProfiles.length !== profiles.length) {
+    await chrome.storage.local.set({ saved: keptComments, profiles: keptProfiles });
+    refreshCount();
+  }
+}
+
+setInterval(syncFromServer, 4000);
+
 function toast(message) {
   const el = document.createElement("div");
   el.textContent = message;
@@ -318,9 +367,13 @@ async function saveComment(hit) {
   const key = r => `${r.username}|${r.posted}|${r.text}`;
   if (saved.some(r => key(r) === key(record))) return toast("Already saved");
 
+  record.synced = await push("/api/save/comment", record);
+
   saved.push(record);
   await chrome.storage.local.set({ saved });
-  toast(`Saved #${saved.length} - @${record.username}`);
+  toast(record.synced
+    ? `Saved #${saved.length} - @${record.username} → dashboard`
+    : `Saved #${saved.length} - @${record.username} (dashboard offline)`);
   refreshCount();
 }
 
@@ -376,13 +429,17 @@ async function saveProfile() {
   const profile = extractProfile();
   if (!profile) return toast("Couldn't read this profile");
 
+  profile.synced = await push("/api/save/profile", profile);
+
   const { profiles = [] } = await chrome.storage.local.get("profiles");
   const i = profiles.findIndex(p => p.username === profile.username);
   if (i >= 0) profiles[i] = profile;
   else profiles.push(profile);
 
   await chrome.storage.local.set({ profiles });
-  toast(`Saved profile @${profile.username}`);
+  toast(profile.synced
+    ? `Saved profile @${profile.username} → dashboard`
+    : `Saved profile @${profile.username} (dashboard offline)`);
   refreshCount();
 }
 
