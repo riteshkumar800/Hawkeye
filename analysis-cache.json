@@ -45,6 +45,11 @@
         ]
       }
     ],
+    "needs": {
+      "askingFor": "Application process details for Schwarzman Scholars Program 2027 in China",
+      "statedContext": "Present Undergrad student at University of Barishal Through Lenses \ud83d\udcf8 \u098f\u09ae\u09cd\u09a8\u09bf!\ud83e\udd7a\ud83d\udc99",
+      "wouldHelp": "Schwarzman Scholars Program application guidelines and requirements on official website or university resources."
+    },
     "topics": [
       "Application Process"
     ],

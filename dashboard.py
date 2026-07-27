@@ -66,6 +66,29 @@ not the people who commented on it.
 
 Return ONLY valid JSON: {"about": "..."}"""
 
+NEEDS_RULES = """Someone left comments on Instagram posts. Work out what they
+are ASKING FOR, so a person reading this could help them.
+
+Return ONLY valid JSON:
+{"asking_for":"...","stated_context":"...","would_help":"..."}
+
+asking_for     - what the comments request, max 25 words. Base this on the
+                 comment text and what the post is about. If they ask for
+                 nothing, write "nothing specific".
+stated_context - ONLY study or work facts the person wrote in their own bio
+                 that relate to the request: course, university, job title,
+                 field of study. Paraphrase closely. If the bio says nothing
+                 relevant, write "not stated".
+would_help     - what information or resource would answer the request,
+                 max 20 words. Describe the RESOURCE, not the person.
+
+Hard rules:
+- Use ONLY what is literally written in the comments and the bio.
+- Never mention or infer religion, ethnicity, nationality, race, gender,
+  age, income, politics, or personality - even if the bio states them.
+- Never guess anything not literally written.
+- Describe the request, never the character of the person."""
+
 ACTIVITY_RULES = """Summarise a SET OF COMMENTS in 1-2 sentences.
 
 Rules:
@@ -241,12 +264,43 @@ def build_posts(labelled):
     return sorted(posts, key=lambda p: -p["commentCount"])
 
 
+def needs_summary(account, labelled):
+    """What is this person asking for, and what would answer it?
+
+    Deliberately narrow: the request, plus study/work context the person
+    stated about themselves. Not a character sketch."""
+    if not labelled:
+        return {"askingFor": "N/A", "statedContext": "N/A", "wouldHelp": "N/A"}
+
+    listing = "\n".join(
+        f'- on a post about "{c["topic"]}" ({c["postCaption"][:120]}): "{c["text"][:200]}"'
+        for c in labelled
+    )
+    prompt = (
+        f"{NEEDS_RULES}\n\n"
+        f"THEIR BIO: {account.get('bio', 'N/A')[:400]}\n\n"
+        f"THEIR COMMENTS:\n{listing}\n\nJSON:"
+    )
+
+    try:
+        data = json.loads(ask_ollama(prompt))
+    except Exception:                                   # noqa: BLE001
+        data = {}
+
+    return {
+        "askingFor": str(data.get("asking_for") or "").strip() or "N/A",
+        "statedContext": str(data.get("stated_context") or "").strip() or "N/A",
+        "wouldHelp": str(data.get("would_help") or "").strip() or "N/A"
+    }
+
+
 def analyze(account):
     labelled = [{**c, **label_comment(c)} for c in account["comments"]]
 
     return {
         "comments": labelled,
         "posts": build_posts(labelled),
+        "needs": needs_summary(account, labelled),
         "topics": sorted({c["topic"] for c in labelled if c["topic"] != "N/A"}),
         "stances": Counter(c["stance"] for c in labelled),
         "tones": Counter(c["tone"] for c in labelled),
@@ -333,6 +387,14 @@ PAGE = """<!doctype html>
 
   .activity { background:#181a1d; border:1px solid #2b3138; border-left:3px solid #3d5a75;
               border-radius:8px; padding:12px 14px; font-size:13px; color:#c8cdd3; }
+
+  .needs { background:#171b19; border:1px solid #29332c; border-left:3px solid #3f7052;
+           border-radius:9px; padding:14px 16px; }
+  .needs .n { margin-bottom:11px; }
+  .needs .n:last-child { margin-bottom:0; }
+  .needs .nk { color:#6f8578; font-size:11px; text-transform:uppercase;
+               letter-spacing:.06em; margin-bottom:3px; }
+  .needs .nv { font-size:13.5px; color:#dbe4dd; }
   .flag { color:#e0906a; font-size:12px; margin-top:8px; }
   .err { color:#e07a6a; font-size:13px; }
   .note { color:#63636c; font-size:11.5px; margin-top:22px;
@@ -431,7 +493,22 @@ function analysisHtml(res) {
     ? res.topics.map(t => `<span class="chip topic">${esc(t)}</span>`).join("")
     : '<span class="chip">N/A</span>';
 
+  const n = res.needs;
+  const needs = n ? `
+    <div class="sect">
+      <h3>What they're asking for</h3>
+      <div class="needs">
+        <div class="n"><div class="nk">asking for</div>
+          <div class="nv">${esc(n.askingFor)}</div></div>
+        <div class="n"><div class="nk">context they stated about themselves</div>
+          <div class="nv">${esc(n.statedContext)}</div></div>
+        <div class="n"><div class="nk">what would help</div>
+          <div class="nv">${esc(n.wouldHelp)}</div></div>
+      </div>
+    </div>` : "";
+
   return `
+    ${needs}
     ${postsHtml(res.posts)}
     <div class="sect">
       <h3>Analysis</h3>
