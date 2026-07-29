@@ -4,6 +4,7 @@
 //   Alt+click a comment   save it
 //   Alt+S on a profile    save handle / name / bio
 //   Alt+N in a modal      save top 5 following/followers
+//   Alt+A anywhere        add a custom note/observation about the user
 //   Alt+R                 report: profiles + the comments saved from them
 //   Alt+L                 raw tables
 //   Alt+E                 export CSVs
@@ -14,11 +15,6 @@ console.log("[watcher] content script loaded on", location.href);
 
 /* ------------------------------------------------------------------
    PART 1 - Route changes
-
-   Content scripts run in an "isolated world": own JS globals, shared
-   DOM. So patching history.pushState patches YOUR copy, not
-   Instagram's, and never fires. We poll location.href instead - a
-   string compare costs nothing and works however IG routes internally.
 ------------------------------------------------------------------ */
 
 let lastUrl = "";
@@ -60,9 +56,6 @@ function getPageType() {
 
 /* ------------------------------------------------------------------
    PART 3 - Watch the DOM
-
-   Instagram uses virtualised lists - nodes churn on every scroll
-   frame - so the observer is debounced and logs only on change.
 ------------------------------------------------------------------ */
 
 let debounceTimer;
@@ -73,15 +66,13 @@ new MutationObserver(() => {
   debounceTimer = setTimeout(scanPage, 400);
 }).observe(document.body, { childList: true, subtree: true });
 
-// A post can be a full page OR a dialog layered over the feed. When
-// it's a dialog, scan only inside it so the feed behind doesn't leak in.
 function scanRoot() {
   return document.querySelector('div[role="dialog"]') || document;
 }
 
 function scanPage() {
   checkUrl();
-  buildPanel();          // Instagram re-renders a lot; re-add if removed
+  buildPanel();          
 
   const type = getPageType();
   const timestamps = scanRoot().querySelectorAll("time[datetime]").length;
@@ -96,7 +87,6 @@ function scanPage() {
     try {
       const comments = extractComments();
       if (comments.length) console.table(comments);
-      else console.log("[watcher] no comments parsed (timestamps seen:", timestamps, ") - press Alt+D to diagnose");
     } catch (err) {
       console.error("[watcher] extractComments failed:", err);
     }
@@ -105,23 +95,12 @@ function scanPage() {
 
 /* ------------------------------------------------------------------
    PART 4 - Finding and parsing comments
-
-   Every comment holds exactly one <time datetime> and one profile
-   link, both real semantic elements. Start at each <time> and climb.
-
-   The climb is SELF-VALIDATING: rather than guessing the shape of the
-   container, each level is tested by actually trying to parse it. The
-   first level that yields both a username and non-empty text wins.
-   That's what makes this work on the post-as-dialog layout and the
-   standalone post page, which nest comments differently.
 ------------------------------------------------------------------ */
 
 const NOISE = /^(Reply|Like|Liked|Liked by|See Translation|Verified|Edited|Translate|Follow|Following|View all \d+ replies|View replies \(\d+\)|Hide replies|more|Show more|Show less|and [\d.,]+[kmb]? others?|[\d.,]+[kmb]? likes?|[\d.,]+[kmb]? repl(y|ies)|[•·—-]+)$/i;
 
 const HAS_CONTENT = /[\p{L}\p{N}\p{Emoji_Presentation}]/u;
 
-// Instagram usernames: letters, digits, dot, underscore, max 30.
-// This is what separates "/andrea_flatlays/" from "/p/DbQztW0jEju/".
 function usernameFromHref(href) {
   if (!href) return null;
   const seg = href.split("?")[0].split("/").filter(Boolean);
@@ -132,9 +111,6 @@ function usernameFromHref(href) {
   return name;
 }
 
-/* Read text by walking TEXT NODES, not innerText. innerText merges
-   inline siblings onto one line, gluing the timestamp and Reply button
-   to the comment as "8 mReply", which no line filter can separate. */
 function commentText(box, username) {
   const parts = [];
   const walker = document.createTreeWalker(box, NodeFilter.SHOW_TEXT);
@@ -143,18 +119,9 @@ function commentText(box, username) {
     const parent = node.parentElement;
     if (!parent) continue;
 
-    // Skip timestamps and icons only. NOT [role="button"] - Instagram
-    // wraps the whole comment row in one, so excluding it wipes out the
-    // body. "Reply"/"Like"/"4 likes" are handled by NOISE instead.
-    //
-    // The box.contains() guard matters: closest() walks to <html>, so
-    // without it an ancestor outside the comment can match and silently
-    // filter everything away.
     const skip = parent.closest("time, svg");
     if (skip && box.contains(skip)) continue;
 
-    // the author's own name link - an @mention survives, since its
-    // href points at a different username
     const link = parent.closest('a[href^="/"]');
     if (link && box.contains(link) &&
         usernameFromHref(link.getAttribute("href")) === username) continue;
@@ -163,9 +130,6 @@ function commentText(box, username) {
     if (t && !NOISE.test(t)) parts.push(t);
   }
 
-  // NOISE is tested per text node, but Instagram splits some labels
-  // across nodes ("7,067" + "likes"), so they're only recognisable
-  // after joining. Strip those leading counters here.
   return parts
     .join(" ")
     .replace(/\s+/g, " ")
@@ -177,8 +141,6 @@ function findComment(timeEl) {
   let node = timeEl.parentElement;
 
   for (let depth = 0; depth < 10 && node && node !== document.body; depth++) {
-    // "Liked by X and 65k others" is not a comment. It always links to
-    // /p/SHORTCODE/liked_by/, which nothing else does.
     if (!node.querySelector('a[href*="/liked_by/"]')) {
       const username = [...node.querySelectorAll('a[href^="/"]')]
         .map(a => usernameFromHref(a.getAttribute("href")))
@@ -197,8 +159,6 @@ function findComment(timeEl) {
 }
 
 function extractComments() {
-  // Keyed by username+timestamp, NOT text: Instagram renders the
-  // caption twice and the copies differ by a trailing "more" toggle.
   const byKey = new Map();
 
   for (const timeEl of scanRoot().querySelectorAll("time[datetime]")) {
@@ -214,7 +174,6 @@ function extractComments() {
   return [...byKey.values()];
 }
 
-/* Explains why nothing was found - run with Alt+D */
 function diagnose() {
   const times = [...scanRoot().querySelectorAll("time[datetime]")];
   console.group(`[watcher] diagnose: ${times.length} timestamps on a "${getPageType()}" page`);
@@ -242,25 +201,11 @@ function diagnose() {
 }
 
 /* ------------------------------------------------------------------
-   PART 5 - Manual save
-
-   A FLAT LOG: one row per saved comment, in save order. Nothing is
-   captured automatically and nothing is grouped by account in storage.
+   PART 5 - Manual save (Comments)
 ------------------------------------------------------------------ */
 
 const COLUMNS = ["username", "posted", "text", "url", "savedAt"];
 const PROFILE_COLUMNS = ["username", "fullName", "bio", "url", "savedAt"];
-
-/* ------------------------------------------------------------------
-   Dashboard sync
-
-   dashboard.py is the source of truth. We still write to
-   chrome.storage first so saving works with the server down, then push.
-   Records that made it to the server are marked synced, and anything
-   synced that later disappears server-side was deleted from a card -
-   so we drop it locally too.
------------------------------------------------------------------- */
-
 const SERVER = "http://localhost:8765";
 const commentKey = r => `${r.username}|${r.posted}|${r.text}`;
 
@@ -273,28 +218,37 @@ async function push(path, record) {
     });
     return res.ok;
   } catch {
-    return false;                 // server not running - stays local
+    return false;                 
   }
 }
 
 async function syncFromServer() {
+  if (!chrome.runtime?.id) return;
+
   let state;
   try {
     state = await fetch(SERVER + "/api/state").then(r => r.json());
   } catch {
-    return;                       // offline: never prune on a failed fetch
+    return;                       
   }
 
   const liveComments = new Set(state.comments || []);
   const liveProfiles = new Set(state.profiles || []);
-  const { saved = [], profiles = [] } = await chrome.storage.local.get(["saved", "profiles"]);
+  
+  try {
+    const { saved = [], profiles = [] } = await chrome.storage.local.get(["saved", "profiles"]);
 
-  const keptComments = saved.filter(r => !r.synced || liveComments.has(commentKey(r)));
-  const keptProfiles = profiles.filter(p => !p.synced || liveProfiles.has(p.username));
+    const keptComments = saved.filter(r => !r.synced || liveComments.has(commentKey(r)));
+    const keptProfiles = profiles.filter(p => !p.synced || liveProfiles.has(p.username));
 
-  if (keptComments.length !== saved.length || keptProfiles.length !== profiles.length) {
-    await chrome.storage.local.set({ saved: keptComments, profiles: keptProfiles });
-    refreshCount();
+    if (keptComments.length !== saved.length || keptProfiles.length !== profiles.length) {
+      await chrome.storage.local.set({ saved: keptComments, profiles: keptProfiles });
+      refreshCount();
+    }
+  } catch (err) {
+    if (!err.message?.includes("Extension context invalidated")) {
+      console.error(err);
+    }
   }
 }
 
@@ -312,8 +266,6 @@ function toast(message) {
   setTimeout(() => el.remove(), 2000);
 }
 
-// From whatever was clicked, find the nearest enclosing <time>, then
-// reuse the same self-validating climb the extractor uses.
 function commentFromClick(target) {
   let node = target;
   for (let i = 0; i < 12 && node && node !== document.body; i++) {
@@ -327,11 +279,6 @@ function commentFromClick(target) {
   return null;
 }
 
-/* What post is this comment on?
-
-   The author is the first profile link in the post header. The caption
-   is that author's EARLIEST entry in the comment list - captions are
-   written when the post is created, so they always sort first. */
 function extractPostContext() {
   const root = scanRoot();
   const header = root.querySelector("header") || root;
@@ -365,8 +312,7 @@ async function saveComment(hit) {
   };
 
   const { saved = [] } = await chrome.storage.local.get("saved");
-  const key = r => `${r.username}|${r.posted}|${r.text}`;
-  if (saved.some(r => key(r) === key(record))) return toast("Already saved");
+  if (saved.some(r => commentKey(r) === commentKey(record))) return toast("Already saved");
 
   record.synced = await push("/api/save/comment", record);
 
@@ -378,7 +324,6 @@ async function saveComment(hit) {
   refreshCount();
 }
 
-// capture phase, so Instagram's own handlers don't swallow the click
 document.addEventListener("click", e => {
   if (!e.altKey) return;
   const hit = commentFromClick(e.target);
@@ -389,10 +334,7 @@ document.addEventListener("click", e => {
 }, true);
 
 /* ------------------------------------------------------------------
-   PART 6 - Profile snapshot (Alt+S)
-
-   Handle, display name, bio. Manual trigger only. No stories, no
-   follower/following lists, no scraping of the post grid.
+   PART 6 - Profile Snapshot
 ------------------------------------------------------------------ */
 
 const HEADER_NOISE =
@@ -405,9 +347,6 @@ function extractProfile() {
   const header = document.querySelector("header");
   if (!header) return null;
 
-  // The fragile part: there's no semantic marker separating display
-  // name from bio - both are plain spans - so strip known chrome and
-  // take what's left.
   const lines = header.innerText
     .split("\n")
     .map(s => s.trim())
@@ -445,18 +384,16 @@ async function saveProfile() {
 }
 
 /* ------------------------------------------------------------------
-   PART 6.5 - Save Following/Followers Modal (Alt+N)
+   PART 6.1 - Save Following/Followers Modal (Alt+N)
 ------------------------------------------------------------------ */
 
 function extractVisibleFollowers() {
   const dialog = document.querySelector('div[role="dialog"]');
   if (!dialog) return null;
 
-  // Determine modal type from header (Following vs Followers)
   const headerText = dialog.querySelector('h1, h2, div[role="heading"]')?.innerText || "";
   const listType = headerText.toLowerCase().includes("following") ? "following" : "followers";
 
-  // Find all profile links inside the dialog
   const links = [...dialog.querySelectorAll('a[href^="/"]')];
   const items = [];
   const seen = new Set();
@@ -466,22 +403,19 @@ function extractVisibleFollowers() {
     if (!handle || seen.has(handle)) continue;
     seen.add(handle);
 
-    // Parent container holding name + handle
     const row = a.closest('div[role="button"], li, div');
-    // const verified = !!row?.querySelector('svg[aria-label="Verified"], svg[aria-label="Verified badge"], svg title:contains("Verified")');
-  const svgList = row?.querySelectorAll('svg') || [];
-const verified = Array.from(svgList).some(svg => 
-  svg.getAttribute('aria-label')?.includes('Verified') || 
-  svg.querySelector('title')?.textContent?.includes('Verified')
-);
-    // Extract display name by finding the first text string that isn't the handle or a button
+    const svgList = row?.querySelectorAll('svg') || [];
+    const verified = Array.from(svgList).some(svg => 
+      svg.getAttribute('aria-label')?.includes('Verified') || 
+      svg.querySelector('title')?.textContent?.includes('Verified')
+    );
+
     const fullName = row?.innerText?.split("\n").find(t => t && t.trim() !== handle && !/follow/i.test(t)) || "";
 
     items.push({ username: handle, fullName: fullName.trim(), verified });
-    if (items.length >= 5) break; // Capture top 5 visible
+    if (items.length >= 5) break; 
   }
 
-  // The profile owner is the first segment of the URL (e.g., /piyushgoyalofficial/)
   const profileHandle = location.pathname.split("/").filter(Boolean)[0];
 
   return {
@@ -503,6 +437,58 @@ async function saveFollowing() {
     ? `Saved ${data.items.length} ${data.listType} for @${data.profileUsername} → dashboard` 
     : `Saved local (${data.listType}) (offline)`);
   refreshCount();
+}
+
+/* ------------------------------------------------------------------
+   PART 6.5 - Custom Notes / Observations (Alt+A)
+------------------------------------------------------------------ */
+
+function getActiveUsername() {
+  const segs = location.pathname.split("/").filter(Boolean);
+  const first = segs[0];
+
+  // 1. If viewing a story or highlight viewer container
+  if (first === "stories") {
+    if (segs[1] && segs[1] !== "highlights") return segs[1];
+    
+    // Scan all anchor tags inside story headers or dialog sections to find the profile owner link
+    const candidateLinks = [...document.querySelectorAll('section header a[href^="/"], div[role="dialog"] header a[href^="/"], header a[href^="/"], main a[href^="/"]')];
+    for (const a of candidateLinks) {
+      const href = a.getAttribute("href");
+      const h = usernameFromHref(href);
+      // Ensure we grab the profile link, avoiding audio tracks or asset links like /music/ or /explore/
+      if (h && !href.includes("/music/") && !href.includes("/audio/")) {
+        return h;
+      }
+    }
+  }
+
+  // 2. If on a standard profile page
+  if (!RESERVED.has(first) && first) return first;
+
+  // 3. Fallback: Post or general header author link
+  const authorLink = document.querySelector('header a[href^="/"]');
+  if (authorLink) return usernameFromHref(authorLink.getAttribute("href"));
+
+  return null;
+}
+
+async function addNote() {
+  const username = getActiveUsername();
+  if (!username) return toast("Couldn't detect the user! Make sure you are on a profile or story.");
+
+  const text = prompt(`Add a custom note/observation for @${username}:`);
+  if (!text || !text.trim()) return;
+
+  const record = {
+    username: username,
+    note: text.trim(),
+    contextUrl: window.location.href, 
+    savedAt: new Date().toISOString()
+  };
+
+  const ok = await push("/api/save/note", record);
+  toast(ok ? `Note saved for @${username}` : `Dashboard offline - couldn't save note`);
 }
 
 /* ------------------------------------------------------------------
@@ -545,9 +531,6 @@ function download(filename, text) {
   URL.revokeObjectURL(url);
 }
 
-/* One flat sheet: a row per saved comment, with the author's profile
-   fields joined on alongside. Profiles with no saved comments still get
-   a row so their bio isn't lost. */
 const EXPORT_COLUMNS = [
   "username", "fullName", "bio", "profileUrl",
   "commentText", "commentPosted",
@@ -555,7 +538,6 @@ const EXPORT_COLUMNS = [
   "savedAt"
 ];
 
-// empty cells read as mistakes in a spreadsheet; N/A reads as "known absent"
 const na = v => (v && String(v).trim() ? String(v) : "N/A");
 
 function buildRows(saved, profiles) {
@@ -565,45 +547,28 @@ function buildRows(saved, profiles) {
   for (const c of saved) {
     const p = byUser.get(c.username);
     rows.push({
-      username: c.username,
-      fullName: na(p?.fullName),
-      bio: na(p?.bio),
+      username: c.username, fullName: na(p?.fullName), bio: na(p?.bio),
       profileUrl: p?.url ?? `https://www.instagram.com/${c.username}/`,
-      commentText: na(c.text),
-      commentPosted: na(c.posted),
-      postAuthor: na(c.postAuthor),
-      postCaption: na(c.postCaption),
-      postUrl: na(c.url),
-      savedAt: c.savedAt
+      commentText: na(c.text), commentPosted: na(c.posted),
+      postAuthor: na(c.postAuthor), postCaption: na(c.postCaption),
+      postUrl: na(c.url), savedAt: c.savedAt
     });
   }
 
-  // profiles you snapshotted but saved no comments from
   for (const p of profiles) {
     if (saved.some(c => c.username === p.username)) continue;
     rows.push({
-      username: p.username,
-      fullName: na(p.fullName),
-      bio: na(p.bio),
-      profileUrl: p.url,
-      commentText: "N/A",
-      commentPosted: "N/A",
-      postAuthor: "N/A",
-      postCaption: "N/A",
-      postUrl: "N/A",
-      savedAt: p.savedAt
+      username: p.username, fullName: na(p.fullName), bio: na(p.bio),
+      profileUrl: p.url, commentText: "N/A", commentPosted: "N/A",
+      postAuthor: "N/A", postCaption: "N/A", postUrl: "N/A", savedAt: p.savedAt
     });
   }
-
-  // group by post first, then by person - keeps one post's comments together
-  return rows.sort((a, b) =>
-    a.postUrl.localeCompare(b.postUrl) || a.username.localeCompare(b.username));
+  return rows.sort((a, b) => a.postUrl.localeCompare(b.postUrl) || a.username.localeCompare(b.username));
 }
 
 async function exportCsv() {
   const { saved = [], profiles = [] } = await chrome.storage.local.get(["saved", "profiles"]);
   if (!saved.length && !profiles.length) return toast("Nothing saved yet");
-
   const rows = buildRows(saved, profiles);
   download("instagram-data.csv", toCsv(rows, EXPORT_COLUMNS));
   toast(`Exported ${rows.length} rows`);
@@ -611,26 +576,19 @@ async function exportCsv() {
 
 async function listSaved() {
   const { saved = [], profiles = [] } = await chrome.storage.local.get(["saved", "profiles"]);
-  console.log("--- saved comments ---");
-  console.table(saved);
-  console.log("--- saved profiles ---");
-  console.table(profiles);
+  console.log("--- saved comments ---"); console.table(saved);
+  console.log("--- saved profiles ---"); console.table(profiles);
   toast(`${saved.length} comments, ${profiles.length} profiles`);
   return { saved, profiles };
 }
 
 async function clearSaved() {
   await chrome.storage.local.set({ saved: [], profiles: [] });
-  toast("Cleared");
-  refreshCount();
+  toast("Cleared"); refreshCount();
 }
 
 /* ------------------------------------------------------------------
    PART 8 - On-screen controls
-
-   Keyboard shortcuts are unreliable here: Chrome and DevTools claim
-   many Alt combos before the page sees them, and on macOS Option+E is
-   a dead key for accents. Buttons always work.
 ------------------------------------------------------------------ */
 
 const PANEL_ID = "__watcher_panel";
@@ -667,6 +625,7 @@ function buildPanel() {
 
   panel.appendChild(button("Save profile", saveProfile));
   panel.appendChild(button("Save network", saveFollowing));
+  panel.appendChild(button("Add note", addNote)); 
   panel.appendChild(button("Report", report));
   panel.appendChild(button("CSV", exportCsv));
   panel.appendChild(button("Clear", clearSaved));
@@ -682,15 +641,11 @@ async function refreshCount() {
   el.textContent = `${saved.length} comments · ${profiles.length} profiles`;
 }
 
-// capture phase: Instagram stops propagation on some keydowns before
-// they reach a bubble-phase listener on window
 window.addEventListener("keydown", e => {
   if (!e.altKey) return;
-  // e.key is unreliable with Alt on macOS (Option+S produces "ß"),
-  // so match the physical key via e.code instead.
   const actions = {
-    KeyS: saveProfile, KeyN: saveFollowing, KeyR: report, 
-    KeyL: listSaved, KeyE: exportCsv, KeyD: diagnose, KeyK: clearSaved
+    KeyS: saveProfile, KeyN: saveFollowing, KeyA: addNote, 
+    KeyR: report, KeyL: listSaved, KeyE: exportCsv, KeyD: diagnose, KeyK: clearSaved
   };
   const action = actions[e.code];
   if (!action) return;
@@ -700,8 +655,8 @@ window.addEventListener("keydown", e => {
 }, true);
 
 window.__watcher = {
-  extractComments, extractProfile, findComment, diagnose,
-  getPageType, saveProfile, saveFollowing, listSaved, report, exportCsv, clearSaved
+  extractComments, extractProfile, findComment, diagnose, getPageType, 
+  saveProfile, saveFollowing, addNote, listSaved, report, exportCsv, clearSaved
 };
 
 checkUrl();

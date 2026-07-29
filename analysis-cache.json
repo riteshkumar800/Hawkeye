@@ -14,7 +14,7 @@
         "topic": "Application Process",
         "language": "English",
         "targetsPerson": "no",
-        "summary": "Asks about application process"
+        "summary": "Application process details requested"
       }
     ],
     "posts": [
@@ -40,15 +40,15 @@
             "topic": "Application Process",
             "language": "English",
             "targetsPerson": "no",
-            "summary": "Asks about application process"
+            "summary": "Application process details requested"
           }
         ]
       }
     ],
     "needs": {
-      "askingFor": "Application process details for Schwarzman Scholars Program 2027 in China",
-      "statedContext": "Present Undergrad student at University of Barishal Through Lenses 📸 এম্নি!🥺💙",
-      "wouldHelp": "Schwarzman Scholars Program application guidelines and requirements on official website or university resources."
+      "askingFor": "Information on application process, requirements, and potential resources for Schwarzman Scholars Program 2027.",
+      "statedContext": "Undergraduate student at University of Barishal, interested in education and academic opportunities.",
+      "wouldHelp": "Schwarzman Scholars Program information, application guidance, or resources for Bangladeshi students"
     },
     "topics": [
       "Application Process"
@@ -66,7 +66,7 @@
       "English": 1
     },
     "flagged": 0,
-    "activity": "application process inquiry"
+    "activity": "curious and helpful"
   },
   "sofi_min0093": {
     "comments": [
@@ -206,131 +206,163 @@
     "flagged": 0,
     "activity": "Vikram-1 launch"
   },
-  "rihaan__27": {
-    "comments": [
-      {
-        "text": "gracias leoooo",
-        "posted": "2026-07-28T12:04:20.000Z",
-        "postAuthor": "leomessi",
-        "postCaption": "2️⃣0️⃣0️⃣6️⃣⚽️2️⃣0️⃣2️⃣6️⃣",
-        "postUrl": "https://www.instagram.com/p/DZifppZj_cB/?img_index=1",
-        "savedAt": "2026-07-28T12:08:53.424Z",
-        "stance": "supportive",
-        "tone": "positive",
-        "intent": "praise",
-        "topic": "football match",
-        "language": "Spanish",
-        "targetsPerson": "no",
-        "summary": "Appreciation for the post"
-      }
-    ],
-    "posts": [
-      {
-        "postUrl": "https://www.instagram.com/p/DZifppZj_cB/?img_index=1",
-        "postAuthor": "leomessi",
-        "postCaption": "2️⃣0️⃣0️⃣6️⃣⚽️2️⃣0️⃣2️⃣6️⃣",
-        "topic": "football match",
-        "about": "A photo of a soccer ball with the numbers 2020 and 2026 on it, likely related to a sports event or championship.",
-        "position": "in favour",
-        "commentCount": 1,
-        "comments": [
-          {
-            "text": "gracias leoooo",
-            "posted": "2026-07-28T12:04:20.000Z",
-            "postAuthor": "leomessi",
-            "postCaption": "2️⃣0️⃣0️⃣6️⃣⚽️2️⃣0️⃣2️⃣6️⃣",
-            "postUrl": "https://www.instagram.com/p/DZifppZj_cB/?img_index=1",
-            "savedAt": "2026-07-28T12:08:53.424Z",
-            "stance": "supportive",
-            "tone": "positive",
-            "intent": "praise",
-            "topic": "football match",
-            "language": "Spanish",
-            "targetsPerson": "no",
-            "summary": "Appreciation for the post"
-          }
-        ]
-      }
-    ],
+  "meme_sy_muqarrab": {
+    "comments": [],
+    "posts": [],
     "needs": {
-      "askingFor": "information about the 2026 FIFA World Cup",
-      "statedContext": "NITA'29 then even nothingness was not...",
-      "wouldHelp": "FIFA official website or a reliable sports news source"
+      "askingFor": "Content related to coding, travel, and Islamic studies, as well as resources for entrepreneurship and self-improvement.",
+      "statedContext": "Founder of a Reel creation platform with a focus on Palestine and Kashmir, indicating an interest in social justice and activism.",
+      "wouldHelp": "Coding tutorials, travel guides, and Islamic educational content, as well as resources for entrepreneurs and activists in the Middle East."
     },
-    "topics": [
-      "football match"
-    ],
-    "stances": {
-      "supportive": 1
-    },
-    "tones": {
-      "positive": 1
-    },
-    "intents": {
-      "praise": 1
-    },
-    "languages": {
-      "Spanish": 1
-    },
+    "topics": [],
+    "stances": {},
+    "tones": {},
+    "intents": {},
+    "languages": {},
     "flagged": 0,
-    "activity": "football match"
+    "activity": "A tech-savvy, travel enthusiast who shares their experiences and perspectives on social justice issues, particularly focusing on the Palestinian and Kashmiri causes, while showcasing their coding skills and promoting their own app."
   },
-  "_aritesha__": {
+  "manjhuhh": {
+    "comments": [],
+    "posts": [],
+    "needs": {
+      "askingFor": "Content related to art, self-expression, and possibly existentialism or philosophy, as well as football and K-pop, based on their interest in drawing and following artists like LararaJj and MNiJungKook.",
+      "statedContext": "Embracing individuality and freedom, with a focus on creative expression and personal growth, inspired by Franz Kafka's quote.",
+      "wouldHelp": "Art tutorials, philosophical discussions, or football analysis, as well as K-pop content and resources for fans of MNiJungKook."
+    },
+    "topics": [],
+    "stances": {},
+    "tones": {},
+    "intents": {},
+    "languages": {},
+    "flagged": 0,
+    "activity": "A creative and introspective individual who expresses themselves through drawing and shares their thoughts on life, identity, and personal growth, often referencing literary works and embracing individuality."
+  },
+  "berkekalkavan": {
     "comments": [
       {
-        "text": "messssiiiiiiii",
-        "posted": "2026-07-28T12:06:35.000Z",
-        "postAuthor": "leomessi",
-        "postCaption": "2️⃣0️⃣0️⃣6️⃣⚽️2️⃣0️⃣2️⃣6️⃣",
-        "postUrl": "https://www.instagram.com/p/DZifppZj_cB/?img_index=1",
-        "savedAt": "2026-07-28T12:08:43.058Z",
-        "stance": "unclear",
+        "text": "How you get 30k view on your first reels with 1 follower",
+        "posted": "2026-05-29T18:56:12.000Z",
+        "postAuthor": "phoenixdrinkh2o",
+        "postCaption": "i'm starting a new account from zero because i realized i've been watching everyone else live their best life instead of living mine so for the rest of this year i'm deciding to stop consuming and start creating something that is genuinely me. thank you for watching my little introduction and being here from the start ❤️ its_archanger My left ear really enjoyed it berkekalkavan How you get 30k view on your first reels with 1 follower hectorrdiazzzz I’ve had my gear for over a year and haven’t done anything either 🤣 kidskenzie7 What app do you use to edit? noywinner i need tips. I wanna restart but idk how ill post singing in a way they'll be viral. I also wanna show more of myself but idk how. adi_thyan__ms I think it's the prologue before the great story begins🙌 rebert_fragoso Just come to Brazil. I promise you gonna be famus dakotagraphx What do you use to edit? ykciv_violetta ohh I love this format for a first video... Can I do something similar? 💜 1hunch1 im on the same type of ",
+        "postUrl": "https://www.instagram.com/p/DY3L7sgPeZn/",
+        "savedAt": "2026-07-29T13:54:31.291Z",
+        "stance": "question",
         "tone": "neutral",
-        "intent": "other",
-        "topic": "football",
+        "intent": "request",
+        "topic": "getting views",
         "language": "English",
         "targetsPerson": "no",
-        "summary": "Too short to judge"
+        "summary": "How to get 30k views on Reels"
       }
     ],
     "posts": [
       {
-        "postUrl": "https://www.instagram.com/p/DZifppZj_cB/?img_index=1",
-        "postAuthor": "leomessi",
-        "postCaption": "2️⃣0️⃣0️⃣6️⃣⚽️2️⃣0️⃣2️⃣6️⃣",
-        "topic": "football",
-        "about": "A photo of a soccer ball with the numbers 2020 and 2026 on it, likely related to a sports event or championship.",
-        "position": "neutral",
+        "postUrl": "https://www.instagram.com/p/DY3L7sgPeZn/",
+        "postAuthor": "phoenixdrinkh2o",
+        "postCaption": "i'm starting a new account from zero because i realized i've been watching everyone else live their best life instead of living mine so for the rest of this year i'm deciding to stop consuming and start creating something that is genuinely me. thank you for watching my little introduction and being here from the start ❤️ its_archanger My left ear really enjoyed it berkekalkavan How you get 30k view on your first reels with 1 follower hectorrdiazzzz I’ve had my gear for over a year and haven’t done anything either 🤣 kidskenzie7 What app do you use to edit? noywinner i need tips. I wanna restart but idk how ill post singing in a way they'll be viral. I also wanna show more of myself but idk how. adi_thyan__ms I think it's the prologue before the great story begins🙌 rebert_fragoso Just come to Brazil. I promise you gonna be famus dakotagraphx What do you use to edit? ykciv_violetta ohh I love this format for a first video... Can I do something similar? 💜 1hunch1 im on the same type of ",
+        "topic": "getting views",
+        "about": "New Instagram account introduction post about starting fresh and creating something genuine",
+        "position": "asking",
         "commentCount": 1,
         "comments": [
           {
-            "text": "messssiiiiiiii",
-            "posted": "2026-07-28T12:06:35.000Z",
-            "postAuthor": "leomessi",
-            "postCaption": "2️⃣0️⃣0️⃣6️⃣⚽️2️⃣0️⃣2️⃣6️⃣",
-            "postUrl": "https://www.instagram.com/p/DZifppZj_cB/?img_index=1",
-            "savedAt": "2026-07-28T12:08:43.058Z",
-            "stance": "unclear",
+            "text": "How you get 30k view on your first reels with 1 follower",
+            "posted": "2026-05-29T18:56:12.000Z",
+            "postAuthor": "phoenixdrinkh2o",
+            "postCaption": "i'm starting a new account from zero because i realized i've been watching everyone else live their best life instead of living mine so for the rest of this year i'm deciding to stop consuming and start creating something that is genuinely me. thank you for watching my little introduction and being here from the start ❤️ its_archanger My left ear really enjoyed it berkekalkavan How you get 30k view on your first reels with 1 follower hectorrdiazzzz I’ve had my gear for over a year and haven’t done anything either 🤣 kidskenzie7 What app do you use to edit? noywinner i need tips. I wanna restart but idk how ill post singing in a way they'll be viral. I also wanna show more of myself but idk how. adi_thyan__ms I think it's the prologue before the great story begins🙌 rebert_fragoso Just come to Brazil. I promise you gonna be famus dakotagraphx What do you use to edit? ykciv_violetta ohh I love this format for a first video... Can I do something similar? 💜 1hunch1 im on the same type of ",
+            "postUrl": "https://www.instagram.com/p/DY3L7sgPeZn/",
+            "savedAt": "2026-07-29T13:54:31.291Z",
+            "stance": "question",
             "tone": "neutral",
-            "intent": "other",
-            "topic": "football",
+            "intent": "request",
+            "topic": "getting views",
             "language": "English",
             "targetsPerson": "no",
-            "summary": "Too short to judge"
+            "summary": "How to get 30k views on Reels"
           }
         ]
       }
     ],
     "needs": {
-      "askingFor": "football stats or scores for 2026 season",
-      "statedContext": "NITA'27 New",
-      "wouldHelp": "official football league website or sports news outlet"
+      "askingFor": "Content related to triathlon, running, and sports analysis, as well as resources on growing a new Instagram account.",
+      "statedContext": "Athlete from Istanbul with experience in triathlon and running, looking for support and resources.",
+      "wouldHelp": "Triathlon training tips, running advice, and strategies for increasing Instagram views and engagement."
     },
     "topics": [
-      "football"
+      "getting views"
     ],
     "stances": {
-      "unclear": 1
+      "question": 1
+    },
+    "tones": {
+      "neutral": 1
+    },
+    "intents": {
+      "request": 1
+    },
+    "languages": {
+      "English": 1
+    },
+    "flagged": 0,
+    "activity": "A fitness enthusiast and athlete who shares their passion for running, triathlon, and sports-related topics, often seeking advice or insights from others in the community. They align with athletes and sports influencers on social media, such as @besiktas and @leomessi, and engage with like-minded individuals through comments and direct messages. Their tone is generally neutral and informative, reflecting their interest in sharing knowledge and learning from others."
+  },
+  "bloomfieldpottery": {
+    "comments": [
+      {
+        "text": "This used to happen to me when I was younger. I guess I’m dead inside now",
+        "posted": "2026-07-28T20:25:30.000Z",
+        "postAuthor": "thishowthingswork",
+        "postCaption": "Some people experience a powerful wave of chills, goosebumps, or tingling sensations while listening to certain songs. This response is known as frisson, a real psychological phenomenon that occurs when music strongly activates the brain’s emotional and reward systems. Researchers believe frisson is linked to the release of dopamine, a chemical involved in pleasure, motivation, and anticipation. Unexpected chord changes, emotional lyrics, soaring vocals, or dramatic musical buildups can all increase the chances of experiencing it. Not everyone experiences frisson, and those who do may feel it more often during music that has personal meaning or evokes strong emotions. Scientists also believe people who are more open to new experiences are generally more likely to experience these musical chills. wizdomlezz special people button❤️—> xo_whit_xo I also get choked up and cry. even to upbeat fun songs just because I love it so much its_mamta_007 😍❤️❤️🙌 llinett77 Scientifically the reason ",
+        "postUrl": "https://www.instagram.com/p/DbWP30zlB81/",
+        "savedAt": "2026-07-29T14:47:36.263Z",
+        "stance": "critical",
+        "tone": "neutral",
+        "intent": "other",
+        "topic": "frisson experience",
+        "language": "English",
+        "targetsPerson": "yes",
+        "summary": "Lost frisson experience over time"
+      }
+    ],
+    "posts": [
+      {
+        "postUrl": "https://www.instagram.com/p/DbWP30zlB81/",
+        "postAuthor": "thishowthingswork",
+        "postCaption": "Some people experience a powerful wave of chills, goosebumps, or tingling sensations while listening to certain songs. This response is known as frisson, a real psychological phenomenon that occurs when music strongly activates the brain’s emotional and reward systems. Researchers believe frisson is linked to the release of dopamine, a chemical involved in pleasure, motivation, and anticipation. Unexpected chord changes, emotional lyrics, soaring vocals, or dramatic musical buildups can all increase the chances of experiencing it. Not everyone experiences frisson, and those who do may feel it more often during music that has personal meaning or evokes strong emotions. Scientists also believe people who are more open to new experiences are generally more likely to experience these musical chills. wizdomlezz special people button❤️—> xo_whit_xo I also get choked up and cry. even to upbeat fun songs just because I love it so much its_mamta_007 😍❤️❤️🙌 llinett77 Scientifically the reason ",
+        "topic": "frisson experience",
+        "about": "A psychological phenomenon where people experience a strong emotional response to music, often characterized by physical sensations such as chills or goosebumps.",
+        "position": "against",
+        "commentCount": 1,
+        "comments": [
+          {
+            "text": "This used to happen to me when I was younger. I guess I’m dead inside now",
+            "posted": "2026-07-28T20:25:30.000Z",
+            "postAuthor": "thishowthingswork",
+            "postCaption": "Some people experience a powerful wave of chills, goosebumps, or tingling sensations while listening to certain songs. This response is known as frisson, a real psychological phenomenon that occurs when music strongly activates the brain’s emotional and reward systems. Researchers believe frisson is linked to the release of dopamine, a chemical involved in pleasure, motivation, and anticipation. Unexpected chord changes, emotional lyrics, soaring vocals, or dramatic musical buildups can all increase the chances of experiencing it. Not everyone experiences frisson, and those who do may feel it more often during music that has personal meaning or evokes strong emotions. Scientists also believe people who are more open to new experiences are generally more likely to experience these musical chills. wizdomlezz special people button❤️—> xo_whit_xo I also get choked up and cry. even to upbeat fun songs just because I love it so much its_mamta_007 😍❤️❤️🙌 llinett77 Scientifically the reason ",
+            "postUrl": "https://www.instagram.com/p/DbWP30zlB81/",
+            "savedAt": "2026-07-29T14:47:36.263Z",
+            "stance": "critical",
+            "tone": "neutral",
+            "intent": "other",
+            "topic": "frisson experience",
+            "language": "English",
+            "targetsPerson": "yes",
+            "summary": "Lost frisson experience over time"
+          }
+        ]
+      }
+    ],
+    "needs": {
+      "askingFor": "Content related to art, drawing, and historical preservation, as well as resources for staying inspired and engaged with the creative process.",
+      "statedContext": "Private studio and garden in Bloomfield CT, with a focus on art and nature, and an interest in preserving history through documentation.",
+      "wouldHelp": "Art tutorials, drawing exercises, and historical preservation guides, as well as recommendations for books on art and history"
+    },
+    "topics": [
+      "frisson experience"
+    ],
+    "stances": {
+      "critical": 1
     },
     "tones": {
       "neutral": 1
@@ -341,7 +373,7 @@
     "languages": {
       "English": 1
     },
-    "flagged": 0,
-    "activity": "football"
+    "flagged": 1,
+    "activity": "This person appears to be a creative and introspective individual who values artistic expression, personal growth, and historical exploration. They seem to be drawn to themes of self-discovery, emotional depth, and the intersection of art and nature. Their online presence suggests a connection to the arts, history, and personal development, with a tone that is often contemplative and slightly sarcastic."
   }
 }

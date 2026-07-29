@@ -1,21 +1,6 @@
 #!/usr/bin/env python3
 """
 Live dashboard for IG DOM Watcher.
-
-    python3 dashboard.py
-
-Opens http://localhost:8765
-
-The extension POSTs here every time you save, so cards appear without
-exporting anything. Data lives in data.json; the CSV is generated on
-demand from the Export button.
-
-Deleting a card removes it here AND from the extension - the content
-script reconciles against this server every few seconds.
-
-SCOPE: labels COMMENTS. Cards show what someone engaged with, how their
-comments were labelled, and what they asked for. No personality
-inference, no scoring of people from their bio.
 """
 
 import csv
@@ -75,36 +60,27 @@ not the people who commented on it.
 
 Return ONLY valid JSON: {"about": "..."}"""
 
-NEEDS_RULES = """Someone left comments on Instagram posts. Work out what they
-are ASKING FOR, so a person reading this could help them.
+NEEDS_RULES = """You are analyzing an Instagram profile holistically based on their bio, comments, manual observations, and captured network connections (followers/following). 
+
+Synthesize all available data to deduce what they like, support, or are interested in (e.g., if they follow football figures like Erling or FIFA, note an interest in football; if they follow political entities like BJP, note political alignment; incorporate manual notes like drawing, bio location/motivations, and comment patterns).
 
 Return ONLY valid JSON:
-{"asking_for":"...","stated_context":"...","would_help":"..."}
-
-asking_for     - what the comments request, max 25 words. If they ask for
-                 nothing, write "nothing specific".
-stated_context - ONLY study or work facts the person wrote in their own bio
-                 that relate to the request: course, university, job title,
-                 field of study. If the bio says nothing relevant, write
-                 "not stated".
-would_help     - what information or resource would answer the request,
-                 max 20 words. Describe the RESOURCE, not the person.
+{
+  "asking_for": "Comprehensive breakdown of their interests, preferences, and what they are looking for based on all signals (max 40 words).",
+  "stated_context": "Key study, work, location, or motivational facts explicitly stated in their bio or observations (max 25 words).",
+  "would_help": "What content, resources, or topics match their demonstrated profile footprint (max 25 words)."
+}
 
 Hard rules:
-- Use ONLY what is literally written in the comments and the bio.
-- Never mention or infer religion, ethnicity, nationality, race, gender,
-  age, income, politics, or personality - even if the bio states them.
-- Never guess anything not literally written.
-- Describe the request, never the character of the person."""
+- Base your inferences strictly on the provided comments, notes, bio text, and network usernames/entities.
+- Do not guess or extrapolate unmentioned demographic attributes."""
 
-ACTIVITY_RULES = """Summarise a SET OF COMMENTS in 1-2 sentences.
+ACTIVITY_RULES = """Write a comprehensive 2-3 sentence profile summary describing what kind of person or profile this is. 
 
 Rules:
-- Describe only the comments: what they ask, what topics they appear
-  under, how they are phrased.
-- Do NOT describe the person, their character, personality, beliefs,
-  nationality, religion or intentions.
-- Do NOT speculate beyond what the comments literally say.
+- Combine insights from their comment topics, tone styles, manual observations/notes, bio statements (like location or motivation), and captured network connections (followers/following accounts).
+- Explain what they are interested in, who they align with based on their network, and how they behave across posts.
+- Do NOT use hate speech or make ungrounded personal attacks.
 
 Return ONLY valid JSON: {"activity": "..."}"""
 
@@ -125,7 +101,6 @@ def load_store():
         except json.JSONDecodeError:
             pass
 
-    # first run: pull in an existing CSV export so old data isn't lost
     store = blank_store()
     if LEGACY_CSV.exists():
         for r in csv.DictReader(LEGACY_CSV.open(encoding="utf-8")):
@@ -180,7 +155,7 @@ def build_accounts(store):
     grouped = defaultdict(lambda: {
         "comments": [], "savedAt": "N/A", "verified": False,
         "fullName": "N/A", "bio": "N/A", "profileUrl": "N/A",
-        "following": [], "followers": []
+        "following": [], "followers": [], "notes": []
     })
 
     for p in store["profiles"]:
@@ -193,7 +168,8 @@ def build_accounts(store):
             profileUrl=p.get("url") or f"https://www.instagram.com/{p['username']}/",
             savedAt=p.get("savedAt", "N/A"),
             following=p.get("following", []),
-            followers=p.get("followers", [])
+            followers=p.get("followers", []),
+            notes=p.get("notes", [])
         )
 
     for c in store["saved"]:
@@ -216,10 +192,8 @@ def build_accounts(store):
 
 
 def build_connections(store, cache):
-    """Who else commented on the same post, and follow relationships."""
     conns = defaultdict(list)
     
-    # --- 1. Same Post Comments ---
     by_post = defaultdict(lambda: defaultdict(list))
     for c in store["saved"]:
         url = c.get("url", "N/A")
@@ -262,19 +236,15 @@ def build_connections(store, cache):
                     "theirComments": [c.get("text", "") for c in users[b]]
                 })
 
-    # --- 2. Social Graph (Followers/Following) Cross-Referencing ---
     all_saved_users = {p["username"] for p in store["profiles"]}
     for p in store["profiles"]:
         user = p["username"]
         
-        # Check Following list
         for item in p.get("following", []):
             f_user = item["username"]
             if f_user in all_saved_users:
-                # Fetch comments to show as a preview
                 their_comments = [c["text"] for c in store["saved"] if c["username"] == f_user]
                 your_comments = [c["text"] for c in store["saved"] if c["username"] == user]
-                
                 conns[user].append({
                     "username": f_user,
                     "postUrl": "N/A",
@@ -282,7 +252,7 @@ def build_connections(store, cache):
                     "relation": "follows (dashboard card exists)",
                     "yourPosition": "following",
                     "theirPosition": "followed",
-                    "theirComments": their_comments[:2] # Top 2 preview
+                    "theirComments": their_comments[:2]
                 })
                 conns[f_user].append({
                     "username": user,
@@ -294,13 +264,11 @@ def build_connections(store, cache):
                     "theirComments": your_comments[:2]
                 })
 
-        # Check Followers list
         for item in p.get("followers", []):
             f_user = item["username"]
             if f_user in all_saved_users:
                 their_comments = [c["text"] for c in store["saved"] if c["username"] == f_user]
                 your_comments = [c["text"] for c in store["saved"] if c["username"] == user]
-                
                 conns[user].append({
                     "username": f_user,
                     "postUrl": "N/A",
@@ -320,7 +288,6 @@ def build_connections(store, cache):
                     "theirComments": your_comments[:2]
                 })
 
-    # Deduplicate connections in case of bidirectional follows
     for k in conns:
         seen = set()
         deduped = []
@@ -330,7 +297,6 @@ def build_connections(store, cache):
                 seen.add(sig)
                 deduped.append(c)
         conns[k] = deduped
-
     return conns
 
 
@@ -403,7 +369,7 @@ def label_comment(comment):
     )
     try:
         data = json.loads(ask_ollama(prompt))
-    except Exception:                                   # noqa: BLE001
+    except Exception:                                   
         data = {}
 
     return {
@@ -423,22 +389,17 @@ def post_about(caption):
     try:
         data = json.loads(ask_ollama(f"{POST_RULES}\n\nCAPTION: {caption[:600]}\n\nJSON:"))
         return str(data.get("about") or "").strip() or "N/A"
-    except Exception:                                   # noqa: BLE001
+    except Exception:                                   
         return "N/A"
 
 
 def position_on_post(comments):
-    """Counted, not generated - so it can never contradict the labels."""
     stances = Counter(c["stance"] for c in comments)
     supportive, critical = stances["supportive"], stances["critical"]
-    if supportive and critical:
-        return "mixed"
-    if critical:
-        return "against"
-    if supportive:
-        return "in favour"
-    if stances["question"]:
-        return "asking"
+    if supportive and critical: return "mixed"
+    if critical: return "against"
+    if supportive: return "in favour"
+    if stances["question"]: return "asking"
     return "neutral"
 
 
@@ -463,22 +424,32 @@ def build_posts(labelled):
     return sorted(posts, key=lambda p: -p["commentCount"])
 
 
-def needs_summary(account, labelled):
-    if not labelled:
+def needs_summary(account, labelled, notes):
+    if not labelled and not notes and not account.get("following") and not account.get("followers"):
         return {"askingFor": "N/A", "statedContext": "N/A", "wouldHelp": "N/A"}
 
     listing = "\n".join(
         f'- on a post about "{c["topic"]}" ({c["postCaption"][:120]}): "{c["text"][:200]}"'
         for c in labelled
     )
+    notes_listing = "\n".join(f'- {n["text"]}' for n in notes)
+    following_listing = ", ".join([f"@{f['username']} ({f['fullName']})" for f in account.get("following", [])[:20]])
+    followers_listing = ", ".join([f"@{f['username']} ({f['fullName']})" for f in account.get("followers", [])[:20]])
+    
+    content = ""
+    if listing: content += f"THEIR COMMENTS:\n{listing}\n\n"
+    if notes_listing: content += f"MANUAL OBSERVATIONS/NOTES:\n{notes_listing}\n\n"
+    if following_listing: content += f"CAPTURED FOLLOWING NETWORK: {following_listing}\n\n"
+    if followers_listing: content += f"CAPTURED FOLLOWERS NETWORK: {followers_listing}\n\n"
+
     prompt = (
         f"{NEEDS_RULES}\n\n"
         f"THEIR BIO: {account.get('bio', 'N/A')[:400]}\n\n"
-        f"THEIR COMMENTS:\n{listing}\n\nJSON:"
+        f"{content}JSON:"
     )
     try:
         data = json.loads(ask_ollama(prompt))
-    except Exception:                                   # noqa: BLE001
+    except Exception:                                   
         data = {}
 
     return {
@@ -488,24 +459,40 @@ def needs_summary(account, labelled):
     }
 
 
-def activity_summary(labelled):
+def activity_summary(labelled, notes, account):
+    if not labelled and not notes and not account.get("following") and not account.get("followers"):
+        return "N/A"
+    
     listing = "\n".join(
         f'- on a post about "{c["topic"]}": "{c["text"][:150]}" [{c["stance"]}, {c["tone"]}]'
         for c in labelled
     )
+    notes_listing = "\n".join(f'- {n["text"]}' for n in notes)
+    following_listing = ", ".join([f"@{f['username']}" for f in account.get("following", [])[:15]])
+    followers_listing = ", ".join([f"@{f['username']}" for f in account.get("followers", [])[:15]])
+    
+    content = ""
+    if listing: content += f"COMMENTS:\n{listing}\n\n"
+    if notes_listing: content += f"MANUAL OBSERVATIONS:\n{notes_listing}\n\n"
+    if following_listing: content += f"FOLLOWING NETWORK ACCOUNTS: {following_listing}\n\n"
+    if followers_listing: content += f"FOLLOWERS NETWORK ACCOUNTS: {followers_listing}\n\n"
+    if account.get("bio"): content += f"BIO: {account.get('bio')}\n\n"
+
     try:
-        data = json.loads(ask_ollama(f"{ACTIVITY_RULES}\n\nCOMMENTS:\n{listing}\n\nJSON:"))
+        data = json.loads(ask_ollama(f"{ACTIVITY_RULES}\n\n{content}JSON:"))
         return str(data.get("activity") or "").strip() or "N/A"
-    except Exception:                                   # noqa: BLE001
+    except Exception:                                   
         return "N/A"
 
 
 def analyze(account):
     labelled = [{**c, **label_comment(c)} for c in account["comments"]]
+    notes = account.get("notes", [])
+    
     return {
         "comments": labelled,
         "posts": build_posts(labelled),
-        "needs": needs_summary(account, labelled),
+        "needs": needs_summary(account, labelled, notes),
         "topics": sorted({c["topic"] for c in labelled if c["topic"] != "N/A"}),
         "stances": Counter(c["stance"] for c in labelled),
         "tones": Counter(c["tone"] for c in labelled),
@@ -513,7 +500,7 @@ def analyze(account):
         "languages": Counter(c["language"] for c in labelled),
         "flagged": sum(1 for c in labelled
                        if c["tone"] in ("angry", "abusive") or c["targetsPerson"] == "yes"),
-        "activity": activity_summary(labelled) if labelled else "N/A"
+        "activity": activity_summary(labelled, notes, account)
     }
 
 
@@ -657,7 +644,7 @@ const field = (k, v, cls = "") =>
   `<div class="field"><div class="k">${esc(k)}</div><div class="v ${cls}">${v}</div></div>`;
 
 const link = u => (u && u !== "N/A")
-  ? `<a href="${esc(u)}" target="_blank" rel="noopener">${esc(u)}</a>`
+  ? `<a href="${esc(u)}" target="_blank" rel="noopener">Source Link</a>`
   : '<span class="muted">N/A</span>';
 
 const when = t => {
@@ -722,38 +709,48 @@ function analysisHtml(res) {
   const n = res.needs;
   const needs = n ? `
     <div class="sect">
-      <h3>What they're asking for</h3>
+      <h3>Profile Interests & Footprint Synthesis</h3>
       <div class="needs">
-        <div class="n"><div class="nk">asking for</div><div class="nv">${esc(n.askingFor)}</div></div>
-        <div class="n"><div class="nk">context they stated about themselves</div>
+        <div class="n"><div class="nk">synthesized interests / focus</div><div class="nv">${esc(n.askingFor)}</div></div>
+        <div class="n"><div class="nk">stated context (Bio / Notes)</div>
           <div class="nv">${esc(n.statedContext)}</div></div>
-        <div class="n"><div class="nk">what would help</div><div class="nv">${esc(n.wouldHelp)}</div></div>
+        <div class="n"><div class="nk">recommended match footprint</div><div class="nv">${esc(n.wouldHelp)}</div></div>
       </div>
     </div>` : "";
 
-  const topics = (res.topics || []).length
-    ? res.topics.map(t => `<span class="chip topic">${esc(t)}</span>`).join("")
-    : '<span class="chip">N/A</span>';
+  let commentAnalysis = "";
+  if (res.comments && res.comments.length > 0) {
+      const topics = (res.topics || []).length
+        ? res.topics.map(t => `<span class="chip topic">${esc(t)}</span>`).join("")
+        : '<span class="chip">N/A</span>';
+      
+      commentAnalysis = `
+        ${postsHtml(res.posts)}
+        <div class="sect">
+          <h3>Comment Analysis</h3>
+          ${res.flagged ? `<div class="flag">${res.flagged} comment(s) flagged angry, abusive, or aimed at an individual</div>` : ""}
+          <div class="field" style="margin-top:14px">
+            <div class="k">engaged with</div><div class="chips">${topics}</div>
+          </div>
+          <div class="row">
+            ${field("stance", `<div class="chips">${chips(res.stances, true)}</div>`)}
+            ${field("tone", `<div class="chips">${chips(res.tones, true)}</div>`)}
+          </div>
+          <div class="row">
+            ${field("intent", `<div class="chips">${chips(res.intents)}</div>`)}
+            ${field("language", `<div class="chips">${chips(res.languages)}</div>`)}
+          </div>
+        </div>`;
+  }
 
   return `
     ${needs}
-    ${postsHtml(res.posts)}
     <div class="sect">
-      <h3>Analysis</h3>
+      <h3>Overall Profile Summary</h3>
       <div class="activity">${esc(res.activity)}</div>
-      ${res.flagged ? `<div class="flag">${res.flagged} comment(s) flagged angry, abusive, or aimed at an individual</div>` : ""}
-      <div class="field" style="margin-top:14px">
-        <div class="k">engaged with</div><div class="chips">${topics}</div>
-      </div>
-      <div class="row">
-        ${field("stance", `<div class="chips">${chips(res.stances, true)}</div>`)}
-        ${field("tone", `<div class="chips">${chips(res.tones, true)}</div>`)}
-      </div>
-      <div class="row">
-        ${field("intent", `<div class="chips">${chips(res.intents)}</div>`)}
-        ${field("language", `<div class="chips">${chips(res.languages)}</div>`)}
-      </div>
-    </div>`;
+    </div>
+    ${commentAnalysis}
+  `;
 }
 
 const RELATION_CLASS = {
@@ -812,11 +809,35 @@ function connectionsHtml(username) {
     </div>`;
 }
 
+function notesHtml(a) {
+  const notes = a.notes || [];
+  if (!notes.length) return "";
+  return `
+    <div class="sect">
+      <h3 style="color:#a6cdf0;">My Observations</h3>
+      ${notes.map((n, idx) => `
+        <div style="background: #1c1c20; border-left: 3px solid #6fa8e0; border-radius: 6px; padding: 10px 12px; margin-bottom: 8px; font-size: 13.5px; position: relative;">
+          <span style="position: absolute; right: 12px; top: 10px; cursor: pointer; color: #75757e; font-size: 18px; line-height: 1;" onclick="delNote('${esc(a.username)}', ${idx})" title="Delete observation">×</span>
+          <div style="padding-right: 20px;">${esc(n.text)}</div>
+          <div style="font-size: 11px; color: #75757e; margin-top: 5px;">${link(n.url)} · Added ${when(n.savedAt)}</div>
+        </div>
+      `).join("")}
+    </div>`;
+}
+
 function cardHtml(a, i, isNew) {
   const res = cache[a.username];
-  const comments = a.comments.length
-    ? (res ? res.comments : a.comments).map(c => commentBlock(c, !!res)).join("")
-    : '<div class="v muted">No comments saved from this account.</div>';
+  
+  let commentsHtml = "";
+  if (a.comments.length > 0) {
+      commentsHtml = `
+      <div class="sect">
+        <h3>Saved comments</h3>
+        <div id="cmts${i}">${(res ? res.comments : a.comments).map(c => commentBlock(c, !!res)).join("")}</div>
+      </div>`;
+  }
+
+  const canAnalyze = a.comments.length > 0 || a.notes.length > 0 || (a.following && a.following.length > 0) || (a.followers && a.followers.length > 0);
 
   return `
     <div class="card ${isNew ? "new" : ""}" id="card${i}">
@@ -834,14 +855,12 @@ function cardHtml(a, i, isNew) {
           ${field("saved comments", a.comments.length)}
           ${field("first saved", when(a.savedAt))}
         </div>
-        <button onclick="run(${i})" ${a.comments.length ? "" : "disabled"}>
+        <button onclick="run(${i})" ${canAnalyze ? "" : "disabled"}>
           ${res ? "Re-analyze" : "Analyze"}
         </button>
       </div>
-      <div class="sect">
-        <h3>Saved comments</h3>
-        <div id="cmts${i}">${comments}</div>
-      </div>
+      ${notesHtml(a)}
+      ${commentsHtml}
       ${networkHtml(a)}
       ${connectionsHtml(a.username)}
       <div id="out${i}">${analysisHtml(res)}</div>
@@ -851,7 +870,7 @@ function cardHtml(a, i, isNew) {
 function render() {
   const grid = document.getElementById("grid");
   const fresh = new Set(accounts.map(a => a.username));
-  known = fresh; // update known BEFORE rendering to highlight cards that exist
+  known = fresh; 
   grid.innerHTML = accounts
     .map((a, i) => cardHtml(a, i, !known.has(a.username)))
     .join("");
@@ -860,7 +879,7 @@ function render() {
     '<div class="empty">Nothing saved yet. Alt+click a comment or press Alt+S on a profile in Instagram - cards appear here automatically.</div>';
 }
 
-let busy = false;   // don't re-render underneath a running analysis
+let busy = false;   
 
 async function poll() {
   try {
@@ -883,13 +902,23 @@ async function poll() {
 }
 
 async function del(username) {
-  if (!confirm(`Delete @${username} and all saved comments from them?\n\nThis also removes them from the extension.`)) return;
+  if (!confirm(`Delete @${username} and all saved items from them?\n\nThis also removes them from the extension.`)) return;
   await fetch("/api/delete", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ username })
   });
   known.delete(username);
+  poll();
+}
+
+async function delNote(username, noteIdx) {
+  if (!confirm(`Remove this observation?`)) return;
+  await fetch("/api/delete/note", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username, noteIdx })
+  });
   poll();
 }
 
@@ -901,7 +930,7 @@ async function run(i) {
   const out = document.getElementById("out" + i);
   busy = true;
   btn.disabled = true; btn.textContent = "Analyzing…";
-  out.innerHTML = '<div class="sect"><div class="v muted">Running Ollama…</div></div>';
+  out.innerHTML = '<div class="sect"><div class="v muted">Running Ollama comprehensive analysis…</div></div>';
 
   try {
     const res = await fetch("/api/analyze", {
@@ -912,8 +941,12 @@ async function run(i) {
 
     if (res.error) throw new Error(res.error);
     cache[accounts[i].username] = res;
-    document.getElementById("cmts" + i).innerHTML =
-      res.comments.map(c => commentBlock(c, true)).join("");
+    
+    const cmtsBlock = document.getElementById("cmts" + i);
+    if (cmtsBlock && res.comments) {
+        cmtsBlock.innerHTML = res.comments.map(c => commentBlock(c, true)).join("");
+    }
+    
     out.innerHTML = analysisHtml(res);
     btn.textContent = "Re-analyze";
   } catch (err) {
@@ -938,7 +971,6 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(code)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(data)))
-        # the extension calls this from the instagram.com origin
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Headers", "Content-Type")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
@@ -966,7 +998,6 @@ class Handler(BaseHTTPRequestHandler):
                 "connections": build_connections(store, cache)
             }))
 
-        # extension polls this to mirror deletions
         if self.path == "/api/state":
             store = load_store()
             return self._send(200, json.dumps({
@@ -1010,7 +1041,7 @@ class Handler(BaseHTTPRequestHandler):
         if self.path == "/api/save/following":
             payload = self._body()
             target_user = payload.get("profileUsername")
-            list_type = payload.get("listType", "following") # "following" or "followers"
+            list_type = payload.get("listType", "following") 
             items = payload.get("items", [])
 
             if not target_user:
@@ -1029,6 +1060,49 @@ class Handler(BaseHTTPRequestHandler):
 
             store["profiles"][i][list_type] = items
             save_store(store)
+            return self._send(200, json.dumps({"ok": True}))
+            
+        if self.path == "/api/save/note":
+            record = self._body()
+            user = record.get("username")
+            if not user:
+                return self._send(400, json.dumps({"error": "no username"}))
+
+            i = next((n for n, p in enumerate(store["profiles"]) if p["username"] == user), None)
+            
+            if i is None:
+                store["profiles"].append({
+                    "username": user,
+                    "fullName": "N/A",
+                    "bio": "N/A",
+                    "url": f"https://www.instagram.com/{user}/",
+                    "savedAt": record.get("savedAt"),
+                    "notes": []
+                })
+                i = len(store["profiles"]) - 1
+
+            if "notes" not in store["profiles"][i]:
+                store["profiles"][i]["notes"] = []
+
+            store["profiles"][i]["notes"].append({
+                "text": record.get("note"),
+                "url": record.get("contextUrl", "N/A"),
+                "savedAt": record.get("savedAt")
+            })
+            
+            save_store(store)
+            return self._send(200, json.dumps({"ok": True}))
+            
+        if self.path == "/api/delete/note":
+            payload = self._body()
+            user = payload.get("username")
+            idx = payload.get("noteIdx")
+            for p in store["profiles"]:
+                if p["username"] == user and "notes" in p:
+                    if 0 <= idx < len(p["notes"]):
+                        p["notes"].pop(idx)
+                        save_store(store)
+                        break
             return self._send(200, json.dumps({"ok": True}))
 
         if self.path == "/api/delete":
@@ -1050,7 +1124,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(404, json.dumps({"error": f"no account {username}"}))
             try:
                 result = analyze(account)
-            except Exception as err:                    # noqa: BLE001
+            except Exception as err:                                   
                 return self._send(500, json.dumps({
                     "error": f"Ollama failed: {err} - is it running, and is MODEL '{MODEL}' pulled?"
                 }))
@@ -1072,7 +1146,10 @@ def main():
     print(f"Store: {STORE_PATH}  -  {len(store['saved'])} comments, "
           f"{len(store['profiles'])} profiles")
     webbrowser.open(url)
-    HTTPServer(("localhost", PORT), Handler).serve_forever()
+    try:
+        HTTPServer(("localhost", PORT), Handler).serve_forever()
+    except KeyboardInterrupt:
+        print("\nDashboard stopped.")
 
 
 if __name__ == "__main__":
