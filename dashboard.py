@@ -39,7 +39,7 @@ TONES = {"neutral", "positive", "angry", "abusive"}
 INTENTS = {"question", "praise", "criticism", "request", "joke", "spam", "other"}
 
 CSV_COLUMNS = [
-    "username", "fullName", "bio", "profileUrl",
+    "username", "fullName", "bio", "verified", "profileUrl",
     "commentText", "commentPosted",
     "postAuthor", "postCaption", "postUrl", "savedAt"
 ]
@@ -178,8 +178,9 @@ def save_cache(cache):
 
 def build_accounts(store):
     grouped = defaultdict(lambda: {
-        "comments": [], "savedAt": "N/A",
-        "fullName": "N/A", "bio": "N/A", "profileUrl": "N/A"
+        "comments": [], "savedAt": "N/A", "verified": False,
+        "fullName": "N/A", "bio": "N/A", "profileUrl": "N/A",
+        "following": [], "followers": []
     })
 
     for p in store["profiles"]:
@@ -188,8 +189,11 @@ def build_accounts(store):
             username=p["username"],
             fullName=p.get("fullName") or "N/A",
             bio=p.get("bio") or "N/A",
+            verified=bool(p.get("verified")),
             profileUrl=p.get("url") or f"https://www.instagram.com/{p['username']}/",
-            savedAt=p.get("savedAt", "N/A")
+            savedAt=p.get("savedAt", "N/A"),
+            following=p.get("following", []),
+            followers=p.get("followers", [])
         )
 
     for c in store["saved"]:
@@ -211,6 +215,125 @@ def build_accounts(store):
     return sorted(grouped.values(), key=lambda a: (-len(a["comments"]), a["username"]))
 
 
+def build_connections(store, cache):
+    """Who else commented on the same post, and follow relationships."""
+    conns = defaultdict(list)
+    
+    # --- 1. Same Post Comments ---
+    by_post = defaultdict(lambda: defaultdict(list))
+    for c in store["saved"]:
+        url = c.get("url", "N/A")
+        if url != "N/A":
+            by_post[url][c["username"]].append(c)
+
+    positions, abouts = {}, {}
+    for user, res in cache.items():
+        for p in res.get("posts", []):
+            positions[(user, p["postUrl"])] = p["position"]
+            abouts.setdefault(p["postUrl"], p.get("about") or p.get("topic") or "N/A")
+
+    def relation(a, b, url):
+        pa, pb = positions.get((a, url)), positions.get((b, url))
+        if not pa or not pb:
+            return "not analysed yet", pa or "unknown", pb or "unknown"
+        if pa == pb == "asking":
+            return "both asking", pa, pb
+        if pa == pb:
+            return "same position", pa, pb
+        if {pa, pb} >= {"against", "in favour"}:
+            return "opposite", pa, pb
+        return "different", pa, pb
+
+    for url, users in by_post.items():
+        if len(users) < 2:
+            continue
+        for a in users:
+            for b in users:
+                if a == b:
+                    continue
+                rel, pa, pb = relation(a, b, url)
+                conns[a].append({
+                    "username": b,
+                    "postUrl": url,
+                    "about": abouts.get(url, "N/A"),
+                    "relation": rel,
+                    "yourPosition": pa,
+                    "theirPosition": pb,
+                    "theirComments": [c.get("text", "") for c in users[b]]
+                })
+
+    # --- 2. Social Graph (Followers/Following) Cross-Referencing ---
+    all_saved_users = {p["username"] for p in store["profiles"]}
+    for p in store["profiles"]:
+        user = p["username"]
+        
+        # Check Following list
+        for item in p.get("following", []):
+            f_user = item["username"]
+            if f_user in all_saved_users:
+                # Fetch comments to show as a preview
+                their_comments = [c["text"] for c in store["saved"] if c["username"] == f_user]
+                your_comments = [c["text"] for c in store["saved"] if c["username"] == user]
+                
+                conns[user].append({
+                    "username": f_user,
+                    "postUrl": "N/A",
+                    "about": f"Follows @{f_user}" + (f" (Has {len(their_comments)} saved comment(s) elsewhere)" if their_comments else ""),
+                    "relation": "follows (dashboard card exists)",
+                    "yourPosition": "following",
+                    "theirPosition": "followed",
+                    "theirComments": their_comments[:2] # Top 2 preview
+                })
+                conns[f_user].append({
+                    "username": user,
+                    "postUrl": "N/A",
+                    "about": f"Followed by @{user}" + (f" (Has {len(your_comments)} saved comment(s) elsewhere)" if your_comments else ""),
+                    "relation": "followed by (dashboard card exists)",
+                    "yourPosition": "followed",
+                    "theirPosition": "following",
+                    "theirComments": your_comments[:2]
+                })
+
+        # Check Followers list
+        for item in p.get("followers", []):
+            f_user = item["username"]
+            if f_user in all_saved_users:
+                their_comments = [c["text"] for c in store["saved"] if c["username"] == f_user]
+                your_comments = [c["text"] for c in store["saved"] if c["username"] == user]
+                
+                conns[user].append({
+                    "username": f_user,
+                    "postUrl": "N/A",
+                    "about": f"Followed by @{f_user}" + (f" (Has {len(their_comments)} saved comment(s) elsewhere)" if their_comments else ""),
+                    "relation": "followed by (dashboard card exists)",
+                    "yourPosition": "followed",
+                    "theirPosition": "following",
+                    "theirComments": their_comments[:2]
+                })
+                conns[f_user].append({
+                    "username": user,
+                    "postUrl": "N/A",
+                    "about": f"Follows @{user}" + (f" (Has {len(your_comments)} saved comment(s) elsewhere)" if your_comments else ""),
+                    "relation": "follows (dashboard card exists)",
+                    "yourPosition": "following",
+                    "theirPosition": "followed",
+                    "theirComments": your_comments[:2]
+                })
+
+    # Deduplicate connections in case of bidirectional follows
+    for k in conns:
+        seen = set()
+        deduped = []
+        for c in conns[k]:
+            sig = (c["username"], c["relation"], c["postUrl"])
+            if sig not in seen:
+                seen.add(sig)
+                deduped.append(c)
+        conns[k] = deduped
+
+    return conns
+
+
 def store_to_csv(store):
     by_user = {p["username"]: p for p in store["profiles"]}
     rows = []
@@ -221,6 +344,7 @@ def store_to_csv(store):
             "username": c["username"],
             "fullName": p.get("fullName") or "N/A",
             "bio": p.get("bio") or "N/A",
+            "verified": "yes" if p.get("verified") else "no",
             "profileUrl": p.get("url") or f"https://www.instagram.com/{c['username']}/",
             "commentText": c.get("text", "N/A"),
             "commentPosted": c.get("posted", "N/A"),
@@ -237,6 +361,7 @@ def store_to_csv(store):
             "username": p["username"],
             "fullName": p.get("fullName") or "N/A",
             "bio": p.get("bio") or "N/A",
+            "verified": "yes" if p.get("verified") else "no",
             "profileUrl": p.get("url") or "N/A",
             "commentText": "N/A", "commentPosted": "N/A",
             "postAuthor": "N/A", "postCaption": "N/A", "postUrl": "N/A",
@@ -419,6 +544,9 @@ PAGE = r"""<!doctype html>
           display:flex; justify-content:space-between; align-items:flex-start; gap:12px; }
   .handle { font-weight:650; font-size:17px; }
   .name { color:#9c9ca6; font-size:13px; margin-top:1px; }
+  .tick { display:inline-flex; align-items:center; justify-content:center;
+          width:16px; height:16px; margin-left:6px; border-radius:50%;
+          background:#3897f0; color:#fff; font-size:10px; vertical-align:middle; }
   .body { padding:18px 20px; }
 
   .field { margin-bottom:14px; }
@@ -482,6 +610,21 @@ PAGE = r"""<!doctype html>
                letter-spacing:.06em; margin-bottom:3px; }
   .needs .nv { font-size:13.5px; color:#dbe4dd; }
 
+  .conn { background:#1a1b1f; border:1px solid #2c3038; border-radius:9px;
+          padding:12px 14px; margin-bottom:10px; }
+  .conn .top { display:flex; align-items:center; gap:9px; flex-wrap:wrap;
+               margin-bottom:7px; }
+  .conn .who { font-weight:600; font-size:13.5px; }
+  .conn .pos { color:#8b8b93; font-size:11.5px; margin-bottom:6px; }
+  .conn .quote { color:#c2c2ca; font-size:12.5px; border-left:2px solid #3a3a42;
+                 padding-left:9px; margin-top:6px; }
+  
+  .chip.both      { background:#16333a; border-color:#2b6b78; color:#a4e2ef; }
+  .chip.same      { background:#1b3324; border-color:#2f6b41; color:#a8e6bd; }
+  .chip.opposite  { background:#4d1a1a; border-color:#912f2f; color:#ffb0b0; }
+  .chip.different { background:#3a2f16; border-color:#7d6222; color:#f0d391; }
+  .chip.pending   { background:#26262a; border-color:#3d3d43; color:#8b8b93; }
+
   .flag { color:#e0906a; font-size:12px; margin-top:8px; }
   .err { color:#e07a6a; font-size:13px; }
   .empty { color:#6e6e77; padding:40px 0; }
@@ -508,7 +651,7 @@ PAGE = r"""<!doctype html>
 const esc = s => String(s ?? "").replace(/[&<>"]/g,
   c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;" }[c]));
 
-let accounts = [], cache = {}, known = new Set();
+let accounts = [], cache = {}, connections = {}, known = new Set();
 
 const field = (k, v, cls = "") =>
   `<div class="field"><div class="k">${esc(k)}</div><div class="v ${cls}">${v}</div></div>`;
@@ -613,6 +756,62 @@ function analysisHtml(res) {
     </div>`;
 }
 
+const RELATION_CLASS = {
+  "both asking": "both", "same position": "same",
+  "opposite": "opposite", "different": "different",
+  "not analysed yet": "pending",
+  "follows (dashboard card exists)": "positive",
+  "followed by (dashboard card exists)": "positive"
+};
+
+function networkHtml(a) {
+  const following = a.following || [];
+  const followers = a.followers || [];
+  if (!following.length && !followers.length) return '';
+
+  const renderList = (title, list) => list.length ? `
+    <div class="field" style="margin-bottom:12px;">
+      <div class="k">${title} (Captured)</div>
+      <div class="chips">
+        ${list.map(f => `
+          <span class="chip ${known.has(f.username) ? 'positive' : ''}" title="${esc(f.fullName)}">
+            @${esc(f.username)} ${known.has(f.username) ? '★' : ''}
+          </span>
+        `).join("")}
+      </div>
+    </div>` : '';
+
+  return `
+    <div class="sect">
+      <h3>Captured Network</h3>
+      ${renderList('Following', following)}
+      ${renderList('Followers', followers)}
+    </div>`;
+}
+
+function connectionsHtml(username) {
+  const list = connections[username] || [];
+  if (!list.length) return "";
+
+  return `
+    <div class="sect">
+      <h3>Connections in Dashboard</h3>
+      ${list.map(c => `
+        <div class="conn">
+          <div class="top">
+            <span class="who">@${esc(c.username)}</span>
+            <span class="chip ${RELATION_CLASS[c.relation] ?? ""}">${esc(c.relation)}</span>
+          </div>
+          <div class="pos">
+            you: ${esc(c.yourPosition)} · them: ${esc(c.theirPosition)} ·
+            ${esc(c.about)}
+          </div>
+          ${c.theirComments.map(t => `<div class="quote">${esc(t)}</div>`).join("")}
+          ${c.postUrl !== "N/A" ? `<div class="pos" style="margin-top:7px">${link(c.postUrl)}</div>` : ""}
+        </div>`).join("")}
+    </div>`;
+}
+
 function cardHtml(a, i, isNew) {
   const res = cache[a.username];
   const comments = a.comments.length
@@ -623,7 +822,7 @@ function cardHtml(a, i, isNew) {
     <div class="card ${isNew ? "new" : ""}" id="card${i}">
       <div class="head">
         <div>
-          <div class="handle">@${esc(a.username)}</div>
+          <div class="handle">@${esc(a.username)}${a.verified ? '<span class="tick" title="Verified">✓</span>' : ""}</div>
           <div class="name">${esc(a.fullName)}</div>
         </div>
         <button class="ghost" onclick="del('${esc(a.username)}')">Delete</button>
@@ -643,6 +842,8 @@ function cardHtml(a, i, isNew) {
         <h3>Saved comments</h3>
         <div id="cmts${i}">${comments}</div>
       </div>
+      ${networkHtml(a)}
+      ${connectionsHtml(a.username)}
       <div id="out${i}">${analysisHtml(res)}</div>
     </div>`;
 }
@@ -650,10 +851,10 @@ function cardHtml(a, i, isNew) {
 function render() {
   const grid = document.getElementById("grid");
   const fresh = new Set(accounts.map(a => a.username));
+  known = fresh; // update known BEFORE rendering to highlight cards that exist
   grid.innerHTML = accounts
     .map((a, i) => cardHtml(a, i, !known.has(a.username)))
     .join("");
-  known = fresh;
 
   document.getElementById("empty").innerHTML = accounts.length ? "" :
     '<div class="empty">Nothing saved yet. Alt+click a comment or press Alt+S on a profile in Instagram - cards appear here automatically.</div>';
@@ -666,8 +867,9 @@ async function poll() {
     const r = await fetch("/api/data").then(r => r.json());
     document.getElementById("dot").classList.remove("off");
 
-    const changed = JSON.stringify(r.accounts) !== JSON.stringify(accounts);
-    accounts = r.accounts; cache = r.cache;
+    const changed = JSON.stringify(r.accounts) !== JSON.stringify(accounts)
+                 || JSON.stringify(r.connections) !== JSON.stringify(connections);
+    accounts = r.accounts; cache = r.cache; connections = r.connections || {};
 
     const total = accounts.reduce((n, a) => n + a.comments.length, 0);
     document.getElementById("sub").textContent =
@@ -757,9 +959,11 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, PAGE, "text/html; charset=utf-8")
 
         if self.path == "/api/data":
-            store = load_store()
+            store, cache = load_store(), load_cache()
             return self._send(200, json.dumps({
-                "accounts": build_accounts(store), "cache": load_cache()
+                "accounts": build_accounts(store),
+                "cache": cache,
+                "connections": build_connections(store, cache)
             }))
 
         # extension polls this to mirror deletions
@@ -802,6 +1006,30 @@ class Handler(BaseHTTPRequestHandler):
                 store["profiles"][i] = record
             save_store(store)
             return self._send(200, json.dumps({"ok": True, "count": len(store["profiles"])}))
+
+        if self.path == "/api/save/following":
+            payload = self._body()
+            target_user = payload.get("profileUsername")
+            list_type = payload.get("listType", "following") # "following" or "followers"
+            items = payload.get("items", [])
+
+            if not target_user:
+                return self._send(400, json.dumps({"error": "missing profileUsername"}))
+
+            i = next((n for n, p in enumerate(store["profiles"]) if p["username"] == target_user), None)
+            if i is None:
+                store["profiles"].append({
+                    "username": target_user,
+                    "fullName": "N/A",
+                    "bio": "N/A",
+                    "url": f"https://www.instagram.com/{target_user}/",
+                    "savedAt": payload.get("savedAt")
+                })
+                i = len(store["profiles"]) - 1
+
+            store["profiles"][i][list_type] = items
+            save_store(store)
+            return self._send(200, json.dumps({"ok": True}))
 
         if self.path == "/api/delete":
             username = self._body().get("username")

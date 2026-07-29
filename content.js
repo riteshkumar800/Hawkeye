@@ -3,6 +3,7 @@
 //
 //   Alt+click a comment   save it
 //   Alt+S on a profile    save handle / name / bio
+//   Alt+N in a modal      save top 5 following/followers
 //   Alt+R                 report: profiles + the comments saved from them
 //   Alt+L                 raw tables
 //   Alt+E                 export CSVs
@@ -443,8 +444,71 @@ async function saveProfile() {
   refreshCount();
 }
 
-/* Join happens at report time from two independent flat lists -
-   nothing accumulates into a per-person record in storage. */
+/* ------------------------------------------------------------------
+   PART 6.5 - Save Following/Followers Modal (Alt+N)
+------------------------------------------------------------------ */
+
+function extractVisibleFollowers() {
+  const dialog = document.querySelector('div[role="dialog"]');
+  if (!dialog) return null;
+
+  // Determine modal type from header (Following vs Followers)
+  const headerText = dialog.querySelector('h1, h2, div[role="heading"]')?.innerText || "";
+  const listType = headerText.toLowerCase().includes("following") ? "following" : "followers";
+
+  // Find all profile links inside the dialog
+  const links = [...dialog.querySelectorAll('a[href^="/"]')];
+  const items = [];
+  const seen = new Set();
+
+  for (const a of links) {
+    const handle = usernameFromHref(a.getAttribute("href"));
+    if (!handle || seen.has(handle)) continue;
+    seen.add(handle);
+
+    // Parent container holding name + handle
+    const row = a.closest('div[role="button"], li, div');
+    // const verified = !!row?.querySelector('svg[aria-label="Verified"], svg[aria-label="Verified badge"], svg title:contains("Verified")');
+  const svgList = row?.querySelectorAll('svg') || [];
+const verified = Array.from(svgList).some(svg => 
+  svg.getAttribute('aria-label')?.includes('Verified') || 
+  svg.querySelector('title')?.textContent?.includes('Verified')
+);
+    // Extract display name by finding the first text string that isn't the handle or a button
+    const fullName = row?.innerText?.split("\n").find(t => t && t.trim() !== handle && !/follow/i.test(t)) || "";
+
+    items.push({ username: handle, fullName: fullName.trim(), verified });
+    if (items.length >= 5) break; // Capture top 5 visible
+  }
+
+  // The profile owner is the first segment of the URL (e.g., /piyushgoyalofficial/)
+  const profileHandle = location.pathname.split("/").filter(Boolean)[0];
+
+  return {
+    profileUsername: profileHandle,
+    listType,
+    items,
+    savedAt: new Date().toISOString()
+  };
+}
+
+async function saveFollowing() {
+  const data = extractVisibleFollowers();
+  if (!data || !data.items.length) {
+    return toast("Open a Following or Followers modal first!");
+  }
+
+  const ok = await push("/api/save/following", data);
+  toast(ok 
+    ? `Saved ${data.items.length} ${data.listType} for @${data.profileUsername} → dashboard` 
+    : `Saved local (${data.listType}) (offline)`);
+  refreshCount();
+}
+
+/* ------------------------------------------------------------------
+   PART 7 - Export / inspect
+------------------------------------------------------------------ */
+
 async function report() {
   const { saved = [], profiles = [] } = await chrome.storage.local.get(["saved", "profiles"]);
 
@@ -464,10 +528,6 @@ async function report() {
   toast(`Report: ${profiles.length} profiles, ${saved.length} comments`);
   return { profiles, saved };
 }
-
-/* ------------------------------------------------------------------
-   PART 7 - Export / inspect
------------------------------------------------------------------- */
 
 function toCsv(rows, columns) {
   const esc = v => `"${String(v ?? "").replace(/"/g, '""')}"`;
@@ -606,6 +666,7 @@ function buildPanel() {
   panel.appendChild(count);
 
   panel.appendChild(button("Save profile", saveProfile));
+  panel.appendChild(button("Save network", saveFollowing));
   panel.appendChild(button("Report", report));
   panel.appendChild(button("CSV", exportCsv));
   panel.appendChild(button("Clear", clearSaved));
@@ -628,8 +689,8 @@ window.addEventListener("keydown", e => {
   // e.key is unreliable with Alt on macOS (Option+S produces "ß"),
   // so match the physical key via e.code instead.
   const actions = {
-    KeyS: saveProfile, KeyR: report, KeyL: listSaved,
-    KeyE: exportCsv, KeyD: diagnose, KeyK: clearSaved
+    KeyS: saveProfile, KeyN: saveFollowing, KeyR: report, 
+    KeyL: listSaved, KeyE: exportCsv, KeyD: diagnose, KeyK: clearSaved
   };
   const action = actions[e.code];
   if (!action) return;
@@ -640,7 +701,7 @@ window.addEventListener("keydown", e => {
 
 window.__watcher = {
   extractComments, extractProfile, findComment, diagnose,
-  getPageType, saveProfile, listSaved, report, exportCsv, clearSaved
+  getPageType, saveProfile, saveFollowing, listSaved, report, exportCsv, clearSaved
 };
 
 checkUrl();
