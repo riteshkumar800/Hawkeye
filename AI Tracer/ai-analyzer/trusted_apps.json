@@ -1,0 +1,6 @@
+{
+  "study_apps": ["Visual Studio Code", "Xcode", "Preview", "Notes", "TextEdit", "Notion", "Terminal"],
+  "study_title_keywords": ["leetcode", "geeksforgeeks", "hackerrank", "codeforces", "stackoverflow", "github", "coursera", "udemy"],
+  "entertainment_apps": ["Spotify", "Steam", "TV", "Music"],
+  "ignore_apps": ["Claude", "Finder", "System Settings", "Activity Monitor"]
+}
